@@ -1,6 +1,8 @@
 import argparse
+import json
 import sys
 from datetime import date
+from pathlib import Path
 from typing import List
 
 from rich.console import Console
@@ -133,6 +135,14 @@ def cmd_analyze(args):
     if not summary:
         console.print("[red]Failed to generate summary.[/]")
         sys.exit(1)
+
+    # Save JSON report to docs/reports/
+    reports_dir = Path(__file__).resolve().parent.parent.parent / "docs" / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    report_path = reports_dir / f"{target_date.isoformat()}.json"
+    with open(report_path, "w", encoding="utf-8") as f:
+        json.dump(summary.model_dump(), f, ensure_ascii=False, indent=2)
+    console.print(f"[dim]Report saved to {report_path}[/]")
 
     # Output JSON representation nicely
     console.print("\n[bold magenta]🚀 Daily Summary Report[/]")

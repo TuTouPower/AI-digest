@@ -48,3 +48,6 @@ htmlcov/
 # uv
 .uv/
 config.yaml
+
+# Generated reports
+docs/reports/

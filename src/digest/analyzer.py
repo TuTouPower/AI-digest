@@ -30,11 +30,11 @@ class Analyzer:
 1. 忽略无意义的交互（如只说了"hi"或空对话）。
 2. 将相关会话按时间线或项目聚合为"活动（Activity）"。
 3. 每个活动的 summary 要简洁概括做了什么事。
-4. **details 必须详细列出该活动中具体做的每一个要点**，不能笼统带过。例如：修改了哪些文件、实现了什么功能、讨论了什么技术概念、产出了什么文档等。至少列出 3-5 个要点。
-5. 如果日志中项目名缺失，请根据上下文推断项目或仓库名（如 "mega-reth"、"blog"、"digest"）。实在推断不出就填 "-"。
+4. details 列出 3-5 个要点，简洁但具体。
+5. 如果日志中项目名缺失，请根据上下文推断。推断不出就填 "-"。
 6. highlights 提供 1-2 句当天整体亮点概述。
-7. 所有文本内容（summary、details、highlights 等）必须使用中文。技术术语保留英文。
-8. 必须输出合法 JSON，匹配以下 schema，不要包含 markdown 代码块。
+7. 所有文本内容必须使用中文，技术术语保留英文。
+8. 直接输出 JSON，不要输出任何分析过程、解释或 markdown 代码块。
 
 JSON 输出格式示例：
 {{
@@ -101,6 +101,7 @@ JSON 输出格式示例：
             payload = {
                 "model": model_name,
                 "messages": messages,
+                "max_tokens": 8192,
                 "response_format": {"type": "json_object"}
             }
             headers = {
@@ -140,15 +141,8 @@ JSON 输出格式示例：
         if not content:
             return None
 
-        # Strip markdown formatting if the model returned ```json ... ```
-        clean_content = content.strip()
-        if clean_content.startswith("```json"):
-            clean_content = clean_content[7:]
-        elif clean_content.startswith("```"):
-            clean_content = clean_content[3:]
-        if clean_content.endswith("```"):
-            clean_content = clean_content[:-3]
-        clean_content = clean_content.strip()
+        # Extract JSON from response content
+        clean_content = self._extract_json(content)
 
         # Parse the JSON response
         try:
@@ -157,6 +151,33 @@ JSON 输出格式示例：
         except (json.JSONDecodeError, ValueError) as e:
             print(f"Failed to parse LLM response: {e}\nRaw output: {content}")
             return None
+
+    def _extract_json(self, content: str) -> str:
+        """Extract JSON from LLM response that may contain reasoning text or markdown fences."""
+        import re
+
+        text = content.strip()
+
+        # Try finding a ```json ... ``` block first
+        m = re.search(r"```(?:json)?\s*\n?(.*?)\n?\s*```", text, re.DOTALL)
+        if m:
+            return m.group(1).strip()
+
+        # Find the outermost { ... } JSON object
+        start = text.find("{")
+        if start == -1:
+            return text
+
+        depth = 0
+        for i in range(start, len(text)):
+            if text[i] == "{":
+                depth += 1
+            elif text[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    return text[start : i + 1]
+
+        return text[start:]
 
     def _build_context_text(self, sessions: List[NormalizedSession]) -> str:
         context_lines = []
